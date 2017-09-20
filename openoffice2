@@ -1,0 +1,13 @@
+网上很多介绍是由于jdk中的没有字体导致乱码，而我遇到的是转换过程并未报错，但转换后的PDF中是乱码，尝试在jre/lib/fonts/中增加字体，还是不能解决问题，因此可以判断非jre字体问题，是linux系统字体问题。
+
+用vim /etc/fonts/fonts.conf,可以看到系统字体文件在/usr/share/fonts,将windows系统字体文件连接到此目录下
+
+ln -s /usr/local/fonts fonts
+
+然后更新缓存：fc-cache
+
+重启openoffice:
+
+ /opt/openoffice4/program/soffice -headless -accept="socket,host=127.0.0.1,port=8100;urp;" -nofirststartwizard &
+
+再转换，字体终于显示正确，不再有乱码
