@@ -1,0 +1,138 @@
+  vsftp的虚拟用户并不是系统中存在的用户，也就是说这些FTP的用户在系统中是不存在的；他们的总体权限其实是集中寄托在一个在系统中的某一个用户身上的，即虚拟宿主用户，它是系统中真是存在的用户。由于他支撑了FTP的所有虚拟的用户，那么他本身的权限将会影响着这些虚拟的用户，因此，处于安全性的考虑，也要非常注意对该用户的权限的控制，该用户也绝对没有登陆系统的必要，这里也设定他的shell为不能登陆系统.
+
+1.建立ftp虚拟用户的宿主用户
+
+[root@localhost ~]#useradd -d /data/upload/ 18ftp -s /sbin/nologin
+[root@localhost ~]#chmod 600 /data/ftp/upload/meiju
+2.编辑文件，填入要配置的虚拟用户，例如dload，生成口令库文件
+
+[root@localhost ~]#vim login.txt    #写入ftp账户名及密码
+dload
+123456
+3.生成db文件
+
+[root@localhost ~]#cd /etc/vsftpd/
+[root@localhost ~]#db_load -T -t hash -f login.txt /etc/vsftpd/login.db
+[root@localhost ~]#chmod 600 /etc/vsftpd/login.db
+4.新建虚拟用户的PAM文件，写入如下两行内容 这两条是手动添加的，内容是对虚拟用户的安全和帐户权限进行验证
+
+这里的auth是指对用户的用户名口令进行验证。
+这里的accout是指对用户的帐户有哪些权限哪些限制进行验证。 其后的sufficient表示充分条件，也就是说，一旦在这里通过了验证，那么也就不用经过下面剩下的验证步骤了。相反，如果没有通过的话，也不会被系统立即挡之门外，因为sufficient的失败不决定整个验证的失败，意味着用户还必须将经历剩下来的验证审核。
+再后面的/lib64/security/pam_userdb.so表示该条审核将调用pam_userdb.so这个库函数进行。
+最后的db=/etc/vsftpd/virtusers则指定了验证库函数将到这个指定的数据库中调用数据进行验证。
+[root@localhost ~]#vim /etc/pam.d/vsftp.vu
+auth required /lib64/security/pam_userdb.so db=/etc/vsftpd/login
+account required /lib64/security/pam_userdb.so db=/etc/vsftpd/login
+5.修改配置文件如下
+
+[root@localhost ~]# vim /etc/vsftpd/vsftpd.conf 
+
+# 设定不允许匿名访问
+anonymous_enable=NO
+
+# 设定本地用户可以访问。
+# 注意：主要是为虚拟宿主用户，如果该项目设定为NO那么所有虚拟用户将无法访问
+local_enable=YES
+
+# 设定可以进行写操作
+write_enable=YES
+
+# 设定上传后文件的权限掩码
+local_umask=022
+
+# 设定开启目录标语功能
+dirmessage_enable=YES
+
+# 设定开启日志记录功能
+xferlog_enable=YES
+
+# 设定端口20进行数据连接
+connect_from_port_20=YES
+
+# 设定日志使用标准的记录格式
+xferlog_std_format=YES
+
+# 设定该Vsftpd服务工作在StandAlone模式下
+# 所谓StandAlone模式就是该服务拥有自己的守护进程支持
+# 在ps -A命令下我们将可用看到vsftpd的守护进程名；
+# 如果不想工作在StandAlone模式下，则可以选择SuperDaemon模式
+# 在SuperDaemon模式下 vsftpd将没有自己的守护进程
+# 而是由超级守护进程Xinetd全权代理，与此同时，Vsftp服务的许多功能将得不到实现。
+listen=YES
+
+# 如果启用此选项，所有的FTP请求和响应都会被记录到日志中，默认日志文件在/var/log/vsftpd.log。
+# 启用此选项时，xferlog_std_format不能被激活。这个选项有助于调试。默认值为NO。
+log_ftp_protocol=YES
+
+# 如果启用，两个LOG文件会各自产生，默认的是/var/log/xferlog和/var/log/vsftpd.log
+# 前一个是wu-ftpd格式的LOG，能被通用工具分析
+# 后一个是VSFTPD的专用LOG格式。
+dual_log_enable=YES
+
+# 只有xferlog_enable被设置，而xferlog_std_format没有被设置时，此项才生效
+# 这是被生成的vsftpd格式的log文件的名字
+# dual_log_enable和这个设置不能同时启用
+# 如果你启用了syslog_enable，那么这个文件不会生成，而只产生一个系统log。
+vsftpd_log_file=/var/log/vsftpd.log
+
+# /etc/vsftpd/user_list 中的用户登录权限
+# yes 不允许列表中的用户登录
+# no 仅允许列表中的用户登录
+userlist_deny=YES
+
+tcp_wrappers=YES
+
+# 设定空闲连接超时时间
+idle_session_timeout=6000
+anon_umask=022
+
+# 用户pam文件
+pam_service_name=vsftp.vu
+
+# 开启虚拟用户
+guest_enable=YES
+
+#下面是限制用户只能访问自己的主目录  存在chroot_list文件中的用户只能访问自己的主目录
+chroot_local_user=YES
+chroot_list_enable=YES
+chroot_list_file=/etc/vsftpd/chroot_list
+
+# FTP用户的宿主账户，该账户不能分配登录系统的权限，bash环境为/sbin/nologin
+# 此账户支撑FTP的所有虚拟的用户,必须为系统真是存在的账户
+guest_username=18ftp
+
+# 虚拟用户单独配置目录
+user_config_dir=/etc/vsftpd/userconfig
+
+# 传输端口
+listen_port=1821
+pasv_enable=YES
+pasv_min_port=10000
+pasv_max_port=10010
+
+6.建立用户个性配置目录 
+
+建立以虚拟用户名dload为文件名的用户个性配置文件，并写入配置；
+
+有多少用户就建立以虚拟用户名为文件名的配置
+
+[root@localhost vsftpd]# mkdir /etc/vsftpd/userconfig/
+[root@localhost userconfig]# pwd
+/etc/vsftpd/userconfig
+
+[root@localhost userconfig]# ll
+total 8
+-rw-r--r--. 1 root root 297 Jan 26 23:55 dload
+dload的内容如下
+
+local_root=/opt/tools   #定义用户目录
+write_enable=yes    #写权限
+download_enable=yes    #下载权限
+anon_upload_enable=yes    #上传权限
+anon_other_write_enable=yes    #重命名修改权限
+anon_mkdir_write_enable=yes    #c创建文件夹权限
+anon_world_readable_only=no    #打开之后不能列出列表，所以一般都是no
+cmds_allowed=ABOR,APPE,CWD,CDUP,FEAT,LIST,MKD,MDTM,PASS,PASV,PWD,QUIT,RETR,REST,STOR,STRU,TYPE,USER,DELE,RMD,RNFR,RNTO
+7.启动程序测试
+
+[root@10-0-10-145-vm /]# service vsftpd start
